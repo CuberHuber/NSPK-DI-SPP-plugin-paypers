@@ -6,11 +6,17 @@
 import logging
 import os
 import time
+from datetime import datetime
+
+import requests
+from bs4 import BeautifulSoup
+from requests.exceptions import RequestException
+from selenium.webdriver.common.by import By
 
 from src.spp.types import SPP_document
 
 
-class SOURCE_PARSER_CLASS:
+class PAYPERS:
     """
     Класс парсера плагина SPP
 
@@ -22,10 +28,12 @@ class SOURCE_PARSER_CLASS:
 
     """
 
-    SOURCE_NAME = '<unique source name>'
+    SOURCE_NAME = 'paypers'
+    HOST = "https://thepaypers.com/news/all"
+
     _content_document: list[SPP_document]
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, driver, *args, **kwargs):
         """
         Конструктор класса парсера
 
@@ -34,6 +42,7 @@ class SOURCE_PARSER_CLASS:
         """
         # Обнуление списка
         self._content_document = []
+        self.driver = driver
 
         # Логер должен подключаться так. Вся настройка лежит на платформе
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -59,14 +68,55 @@ class SOURCE_PARSER_CLASS:
         :rtype:
         """
         # HOST - это главная ссылка на источник, по которому будет "бегать" парсер
-        self.logger.debug(F"Parser enter to {HOST}")
+        self.logger.debug(F"Parser enter to {self.HOST}")
 
         # ========================================
         # Тут должен находится блок кода, отвечающий за парсинг конкретного источника
         # -
 
+        date_begin = datetime(2019, 1, 1)
+        self.driver.get(url=self.HOST)
+        req = requests.get(self.HOST)
+        if req.status_code == 200:
+            req.encoding = "UTF-8"
+            urls = []
+            dates = []
+            soup = BeautifulSoup(req.content.decode('utf-8'), 'html.parser')
+            amount = int(self.driver.find_element(By.ID, "ctl00_MainPlaceHolder_page11Nav").text)
+            check = True
+            try:
+                for i in range(amount):
+                    print("страница номер " + str(i))
+                    try:
+                        page = self.driver.page_source
+                        soup = BeautifulSoup(page, 'html.parser')
+                        link = soup.find("div", class_="topStories index_group")
+                        for link1 in link.find_all("div", class_="index_group"):
+                            j = link1.find("h3")
+                            k = j.find("a")
+                            if not (k.get('href') in urls):
+                                urls.append(k.get('href'))
+                                print(k.get('href'))
+                            else:
+                                check = False
+                            dates.append(link1.find("span").text)
+                    except Exception:
+                        print(Exception)
+                    print("ссылок всего собрано: " + str(len(urls)))
+                    self.driver.execute_script('arguments[0].click()',
+                                               self.driver.find_element(By.ID, "ctl00_MainPlaceHolder_nextLink"))
+                    # print("кнопка нажата")
+                    time.sleep(5)
+            except not check:
+                print("")
+
+
+        else:
+            self.logger.error('Ошибка обращения к источнику')
+            raise RequestException('Источник недоступен')
+
         # Логирование найденного документа
-        self.logger.info(self._find_document_text_for_logger(document))
+        # self.logger.info(self._find_document_text_for_logger(document))
 
         # ---
         # ========================================
